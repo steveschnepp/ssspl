@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#sss.pl v0.1 (12/09/08)
+#sss.pl v0.1.1 (02/10/08)
 use warnings; use strict;
 
 =head1 NAME
@@ -12,7 +12,7 @@ SSS is a Simple SOCKS Server written in perl that implements the SOCKS v5 protoc
 
 It will accept username/password authentication.
 
-The script is able to run in the background as a daemon.
+The script runs in the background as a daemon.
 
 =head2 Why it exists
 
@@ -29,26 +29,41 @@ I hacked together this solution (with help from public domain scripts) and clean
 Its simple, a feature I intend to maintain, however there is scope for much more potential,
 especially with user feedback.
 
+You can read the full story here: http://www.hm2k.com/posts/freebsd-socks-proxy-for-mirc
+
 =head2 Usage
 
-<local_host> <local_port> [auth_login(:auth_pass)]
+You run the script using the following command:
+	./sss.pl <local_host> <local_port> [auth_login(:auth_pass)]
 Note: the auth_pass must be an md5 (hex) hash
-eg: localhost 34567 test 098f6bcd4621d373cade4e832627b4f6
+	eg: ./sss.pl hostname.example.com 34567 test:ae2b1fca515949e5d54fb22b8ed95575
+
+Once up and running you can use the server in mIRC using the following command:
+	/firewall [-cmN[+|-]d] [on|off] <server> <port> <userid> <password>
+For more information on this command issue: /help /firewall in mIRC.
+	eg: /firewall -m5 on hostname.example.com 34567 test testing
 
 =head1 PREREQUISITES
+
+Operating System: Tested on FreeBSD 6.x and CentOS 4.x, should work on others.
 
 Required modules: C<IO::Socket::INET>, C<Digest::MD5>.
 
 =head1 CHANGES
-
+v0.1.1 (02/10/08) - Improved documentation
 v0.1 (12/09/08) - Initial release.
 
 =head1 TODO
 * IPv6 support
 * BIND method
 * UDP ASSOCIATE method
-* GSSAPI authentication support
-* Restrict IP access to the listening port
+* GSSAPI authentication support - for use with firefox (OutCast3k)
+* Restrict IP access to the listening port (Reeve)
+* Logging (Katlyn`)
+
+=head2 FAQ
+* Why is there multiple processes in my process list?
+** Each new connection spawns a new process. I decided to do this to make it easier to manage.
 
 =head2 Notes
 * http://en.wikipedia.org/wiki/SOCKS
@@ -69,10 +84,11 @@ v0.1 (12/09/08) - Initial release.
 * http://tools.ietf.org/html/draft-ietf-aft-socks-v6-req-00
 * http://tools.ietf.org/html/draft-ietf-aft-socks-ssl-00
 * http://www.iana.org/assignments/socks-methods
+* http://developer.mozilla.org/index.php?title=En/Integrated_Authentication
 
 =head1 COPYRIGHT
 
-Copyright (c) 2008, HM2K. All rights reserved.
+Copyright (c) 2008, <a href="http://www.hm2k.com/">HM2K</a>. All rights reserved.
 
 Released as Open Source under the BSD License.
 
@@ -132,7 +148,7 @@ our $local_port = shift;
 our $auth_login = shift;
 our $auth_pass;
 
-if ($auth_login =~ m/:/) {
+if ($auth_login && $auth_login =~ m/:/) {
 	($auth_login,$auth_pass)=split(':', $auth_login);
 }
 
@@ -146,9 +162,9 @@ if ($daemon) {
 
 our $client;
 while($client = $bind->accept()) {
- $client->autoflush();
- if(fork()){ $client->close(); }
- else { $bind->close(); new_client($client); exit(); }
+	$client->autoflush();
+	if(fork()){ $client->close(); }
+	else { $bind->close(); new_client($client); exit(); }
 }
 
 sub new_client {
@@ -156,7 +172,7 @@ sub new_client {
 	my $client = $_[0];
 
 	sysread($client, $buff, 1);
-	if(ord($buff) != 5) { return; } #must be SOCKS5
+	if(ord($buff) != 5) { return; } #must be SOCKS 5
 	
 	sysread($client, $buff, 1);
 	$t=ord($buff);
@@ -172,17 +188,18 @@ sub new_client {
 	 }
 	 elsif($ord == 1 && $auth_login) {
 	   #GSSAPI auth support
+	   #syswrite($client, "\x05\x01", 2);
 	   #$success++;
 	   #last;
 	 }
 	 elsif($ord == 2 && $auth_login) {
-	   unless(do_auth($client)){ return; }
+	   unless(do_login_auth($client)){ return; }
 	   $success++;
 	   last;
 	 }
 	}
 
-	if($success) {
+	if ($success) {
 	 $t = sysread($client, $buff, 3);
 
 	 if(substr($buff, 0, 1) eq "\x05") {
@@ -203,118 +220,118 @@ sub new_client {
 	$client->close();
 }
 
-sub do_auth {
- my($buff, $login, $pass);
- my $client = $_[0];
+sub do_login_auth {
+	my($buff, $login, $pass);
+	my $client = $_[0];
 
- syswrite($client, "\x05\x02", 2);
- sysread($client, $buff, 1);
+	syswrite($client, "\x05\x02", 2);
+	sysread($client, $buff, 1);
 
- if(ord($buff) == 1) {
-   sysread($client, $buff, 1);
-   sysread($client, $login, ord($buff));
-   sysread($client, $buff, 1);
-   sysread($client, $pass, ord($buff));
+	if(ord($buff) == 1) {
+		sysread($client, $buff, 1);
+		sysread($client, $login, ord($buff));
+		sysread($client, $buff, 1);
+		sysread($client, $pass, ord($buff));
 
-   if($login eq $auth_login && md5_hex($pass) eq $auth_pass) {
-     syswrite($client, "\x05\x00", 2);
-     return 1;
-   } else { syswrite($client, "\x05\x01", 2); }
- }
+		if($login eq $auth_login && md5_hex($pass) eq $auth_pass) {
+			syswrite($client, "\x05\x00", 2);
+			return 1;
+		} else { syswrite($client, "\x05\x01", 2); }
+	}
 
- $client->close();
- return 0;
+	$client->close();
+	return 0;
 }
 
 sub socks_get_host {
- my $client = $_[0];
- my ($t, $ord, $raw_host);
- my $host = "";
- my @host;
+	my $client = $_[0];
+	my ($t, $ord, $raw_host);
+	my $host = "";
+	my @host;
 
- sysread($client, $t, 1);
- $ord = ord($t);
- if($ord == 1) {
-   sysread($client, $raw_host, 4);
-   @host = $raw_host =~ /(.)/g;
-   $host = ord($host[0]).".".ord($host[1]).".".ord($host[2]).".".ord($host[3]);
- } elsif($ord == 3) {
-   sysread($client, $raw_host, 1);
-   sysread($client, $host, ord($raw_host));
-   $raw_host .= $host;
- } elsif($ord == 4) {
-   #ipv6
- }
+	sysread($client, $t, 1);
+	$ord = ord($t);
+	if($ord == 1) {
+	sysread($client, $raw_host, 4);
+	@host = $raw_host =~ /(.)/g;
+	$host = ord($host[0]).'.'.ord($host[1]).'.'.ord($host[2]).'.'.ord($host[3]);
+	} elsif($ord == 3) {
+	sysread($client, $raw_host, 1);
+	sysread($client, $host, ord($raw_host));
+	$raw_host .= $host;
+	} elsif($ord == 4) {
+	#ipv6
+	}
 
- return ($host, $t.$raw_host);
+	return ($host, $t.$raw_host);
 }
 
 sub socks_get_port {
- my $client = $_[0];
- my ($raw_port, $port);
- sysread($client, $raw_port, 2);
- $port = ord(substr($raw_port, 0, 1)) << 8 | ord(substr($raw_port, 1, 1));
- return ($port, $raw_port);
+	my $client = $_[0];
+	my ($raw_port, $port);
+	sysread($client, $raw_port, 2);
+	$port = ord(substr($raw_port, 0, 1)) << 8 | ord(substr($raw_port, 1, 1));
+	return ($port, $raw_port);
 }
 
 sub socks_do {
- my($t, $client, $host, $port) = @_;
+	my($t, $client, $host, $port) = @_;
 
- if($t == 1) { socks_connect($client, $host, $port); }
- elsif($t == 2) { socks_bind($client, $host, $port); }
- elsif($t == 3) { socks_udp_associate($client, $host, $port); }
- else { return 0; }
+	if($t == 1) { socks_connect($client, $host, $port); }
+	elsif($t == 2) { socks_bind($client, $host, $port); }
+	elsif($t == 3) { socks_udp_associate($client, $host, $port); }
+	else { return 0; }
 
- return 1;
+	return 1;
 }
 
 sub socks_connect {
- my($client, $host, $port) = @_;
- my $target = IO::Socket::INET->new(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Type => SOCK_STREAM);
+	my($client, $host, $port) = @_;
+	my $target = IO::Socket::INET->new(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Type => SOCK_STREAM);
 
- unless($target) { return; }
+	unless($target) { return; }
 
- $target->autoflush();
- while($client || $target) {
-   my $rin = "";
-   vec($rin, fileno($client), 1) = 1 if $client;
-   vec($rin, fileno($target), 1) = 1 if $target;
-   my($rout, $eout);
-   select($rout = $rin, undef, $eout = $rin, 120);
-   if (!$rout  &&  !$eout) { return; }
-   my $cbuffer = "";
-   my $tbuffer = "";
+	$target->autoflush();
+	while($client || $target) {
+	my $rin = "";
+	vec($rin, fileno($client), 1) = 1 if $client;
+	vec($rin, fileno($target), 1) = 1 if $target;
+	my($rout, $eout);
+	select($rout = $rin, undef, $eout = $rin, 120);
+	if (!$rout  &&  !$eout) { return; }
+	my $cbuffer = "";
+	my $tbuffer = "";
 
-   if ($client && (vec($eout, fileno($client), 1) || vec($rout, fileno($client), 1))) {
-     my $result = sysread($client, $tbuffer, 1024);
-     if (!defined($result) || !$result) { return; }
-   }
+	if ($client && (vec($eout, fileno($client), 1) || vec($rout, fileno($client), 1))) {
+	 my $result = sysread($client, $tbuffer, 1024);
+	 if (!defined($result) || !$result) { return; }
+	}
 
-   if ($target  &&  (vec($eout, fileno($target), 1)  || vec($rout, fileno($target), 1))) {
-     my $result = sysread($target, $cbuffer, 1024);
-     if (!defined($result) || !$result) { return; }
-     }
+	if ($target  &&  (vec($eout, fileno($target), 1)  || vec($rout, fileno($target), 1))) {
+	 my $result = sysread($target, $cbuffer, 1024);
+	 if (!defined($result) || !$result) { return; }
+	 }
 
-   while (my $len = length($tbuffer)) {
-     my $res = syswrite($target, $tbuffer, $len);
-     if ($res > 0) { $tbuffer = substr($tbuffer, $res); } else { return; }
-   }
+	while (my $len = length($tbuffer)) {
+	 my $res = syswrite($target, $tbuffer, $len);
+	 if ($res > 0) { $tbuffer = substr($tbuffer, $res); } else { return; }
+	}
 
-   while (my $len = length($cbuffer)) {
-     my $res = syswrite($client, $cbuffer, $len);
-     if ($res > 0) { $cbuffer = substr($cbuffer, $res); } else { return; }
-   }
- }
+	while (my $len = length($cbuffer)) {
+	 my $res = syswrite($client, $cbuffer, $len);
+	 if ($res > 0) { $cbuffer = substr($cbuffer, $res); } else { return; }
+	}
+	}
 }
 
 sub socks_bind {
- my($client, $host, $port) = @_;
- # not supported
+	my($client, $host, $port) = @_;
+	# not supported
 }
 
 sub socks_udp_associate {
- my($client, $host, $port) = @_;
- # not supported
+	my($client, $host, $port) = @_;
+	# not supported
 }
 
 #EOF
