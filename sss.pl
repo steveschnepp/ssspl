@@ -166,7 +166,7 @@ if ($daemon) {
 our $client;
 while($client = $bind->accept()) {
 	$client->autoflush();
-	if(fork()){ $client->close(); }
+	if (fork()){ $client->close(); }
 	else { $bind->close(); new_client($client); exit(); }
 }
 
@@ -175,7 +175,7 @@ sub new_client {
 	my $client = $_[0];
 
 	sysread($client, $buff, 1);
-	if(ord($buff) != 5) { return; } #must be SOCKS 5
+	if (ord($buff) != 5) { return; } #must be SOCKS 5
 	
 	sysread($client, $buff, 1);
 	$t=ord($buff);
@@ -184,18 +184,18 @@ sub new_client {
 	$success=0;
 	for($i=0; $i < $t; $i++) {
 	 $ord = ord(substr($buff, $i, 1));
-	 if($ord == 0 && !$auth_login) {
+	 if ($ord == 0 && !$auth_login) {
 	   syswrite($client, "\x05\x00", 2);
 	   $success++;
 	   last;
 	 }
-	 elsif($ord == 1 && $auth_login) {
+	 elsif ($ord == 1 && $auth_login) {
 	   #GSSAPI auth support
 	   #syswrite($client, "\x05\x01", 2);
 	   #$success++;
 	   #last;
 	 }
-	 elsif($ord == 2 && $auth_login) {
+	 elsif ($ord == 2 && $auth_login) {
 	   unless(do_login_auth($client)){ return; }
 	   $success++;
 	   last;
@@ -205,12 +205,12 @@ sub new_client {
 	if ($success) {
 	 $t = sysread($client, $buff, 3);
 
-	 if(substr($buff, 0, 1) eq "\x05") {
-	   if(ord(substr($buff, 2, 1)) == 0) { # reserved
+	 if (substr($buff, 0, 1) eq "\x05") {
+	   if (ord(substr($buff, 2, 1)) == 0) { # reserved
 		 my($host, $raw_host) = socks_get_host($client);
-		 if(!$host) { return; }
+		 if (!$host) { return; }
 		 my($port, $raw_port) = socks_get_port($client);
-		 if(!$port) { return; }
+		 if (!$port) { return; }
 		 $ord = ord(substr($buff, 1, 1));
 		 $buff = "\x05\x00\x00".$raw_host.$raw_port;
 		 syswrite($client, $buff, length($buff));
@@ -236,7 +236,7 @@ sub do_login_auth {
 		sysread($client, $buff, 1);
 		sysread($client, $pass, ord($buff));
 
-		if ($login eq $auth_login && md5_hex($pass) eq $auth_pass) {
+		if ($auth_login && $auth_pass && $login eq $auth_login && md5_hex($pass) eq $auth_pass) {
 			syswrite($client, "\x01\x00", 2);
 			return 1;
 		}
@@ -255,15 +255,15 @@ sub socks_get_host {
 
 	sysread($client, $t, 1);
 	$ord = ord($t);
-	if($ord == 1) {
+	if ($ord == 1) {
 	sysread($client, $raw_host, 4);
 	@host = $raw_host =~ /(.)/g;
 	$host = ord($host[0]).'.'.ord($host[1]).'.'.ord($host[2]).'.'.ord($host[3]);
-	} elsif($ord == 3) {
+	} elsif ($ord == 3) {
 	sysread($client, $raw_host, 1);
 	sysread($client, $host, ord($raw_host));
 	$raw_host .= $host;
-	} elsif($ord == 4) {
+	} elsif ($ord == 4) {
 	#ipv6
 	}
 
@@ -281,9 +281,9 @@ sub socks_get_port {
 sub socks_do {
 	my($t, $client, $host, $port) = @_;
 
-	if($t == 1) { socks_connect($client, $host, $port); }
-	elsif($t == 2) { socks_bind($client, $host, $port); }
-	elsif($t == 3) { socks_udp_associate($client, $host, $port); }
+	if ($t == 1) { socks_connect($client, $host, $port); }
+	elsif ($t == 2) { socks_bind($client, $host, $port); }
+	elsif ($t == 3) { socks_udp_associate($client, $host, $port); }
 	else { return 0; }
 
 	return 1;
