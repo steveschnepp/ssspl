@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#sss.pl v0.1.1 (02/10/08)
+#sss.pl v0.1.2 (27/02/09)
 use warnings; use strict;
 
 =head1 NAME
@@ -50,6 +50,7 @@ Operating System: Tested on FreeBSD 6.x and CentOS 4.x, should work on others.
 Required modules: C<IO::Socket::INET>, C<Digest::MD5>.
 
 =head1 CHANGES
+v0.1.2 (27/02/09) - Fixed a bug (Thanks Andreas)
 v0.1.1 (02/10/08) - Improved documentation
 v0.1 (12/09/08) - Initial release.
 
@@ -90,7 +91,7 @@ v0.1 (12/09/08) - Initial release.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2008, <a href="http://www.hm2k.com/">HM2K</a>. All rights reserved.
+Copyright (c) 2008-2009, <a href="http://www.hm2k.com/">HM2K</a>. All rights reserved.
 
 Released as Open Source under the BSD License.
 
@@ -229,16 +230,17 @@ sub do_login_auth {
 	syswrite($client, "\x05\x02", 2);
 	sysread($client, $buff, 1);
 
-	if(ord($buff) == 1) {
+	if (ord($buff) == 1) {
 		sysread($client, $buff, 1);
 		sysread($client, $login, ord($buff));
 		sysread($client, $buff, 1);
 		sysread($client, $pass, ord($buff));
 
-		if($login eq $auth_login && md5_hex($pass) eq $auth_pass) {
-			syswrite($client, "\x05\x00", 2);
+		if ($login eq $auth_login && md5_hex($pass) eq $auth_pass) {
+			syswrite($client, "\x01\x00", 2);
 			return 1;
-		} else { syswrite($client, "\x05\x01", 2); }
+		}
+		else { syswrite($client, "\x01\x01", 2); }
 	}
 
 	$client->close();
