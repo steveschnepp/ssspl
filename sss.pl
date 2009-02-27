@@ -54,12 +54,14 @@ v0.1.1 (02/10/08) - Improved documentation
 v0.1 (12/09/08) - Initial release.
 
 =head1 TODO
+* In mIRC $serverip returns 255.255.255.255 <digital>
+* Outgoing DCCs are borked (mIRC) <digital>
 * IPv6 support
 * BIND method
 * UDP ASSOCIATE method
-* GSSAPI authentication support - for use with firefox (OutCast3k)
-* Restrict IP access to the listening port (Reeve)
-* Logging (Katlyn`)
+* GSSAPI authentication support - for use with firefox <OutCast3k>
+* Restrict IP access to the listening port <Reeve>
+* Logging <Katlyn`>
 
 =head2 FAQ
 * Why is there multiple processes in my process list?
