@@ -56,13 +56,16 @@ v0.1 (12/09/08) - Initial release.
 
 =head1 TODO
 * In mIRC $serverip returns 255.255.255.255 <digital>
+** See: http://trout.snt.utwente.nl/ubbthreads/ubbthreads.php?ubb=showflat&Number=216636
 * Outgoing DCCs are borked (mIRC) <digital>
 * IPv6 support
 * BIND method
 * UDP ASSOCIATE method
-* GSSAPI authentication support - for use with firefox <OutCast3k>
+* Mozilla Firefox support/GSSAPI authentication support <OutCast3k>
+** See: http://forums.mozillazine.org/viewtopic.php?f=38&t=847655
 * Restrict IP access to the listening port <Reeve>
 * Logging <Katlyn`>
+* Display the PID when process goes into background.
 
 =head2 FAQ
 * Why is there multiple processes in my process list?
@@ -138,7 +141,7 @@ use IO::Socket::INET;
 use Digest::MD5 qw(md5_hex);
 
 if (!$ARGV[1]) {
-	die "Usage: <local_host> <local_port> [auth_login(:auth_pass)]\n".
+	die "Usage: <local_host> <local_port> [auth_login(:auth_pass)] [timeout=180]\n".
 		"Note: the auth_pass must be an md5 (hex) hash\n".
 		"eg: localhost 34567 test 098f6bcd4621d373cade4e832627b4f6\n";
 }
@@ -149,6 +152,7 @@ my $daemon=1; #run as a daemon or not (1/0)
 our $local_host = shift;
 our $local_port = shift;
 our $auth_login = shift;
+our $timeout    = shift or 180;
 our $auth_pass;
 
 if ($auth_login && $auth_login =~ m/:/) {
@@ -156,7 +160,7 @@ if ($auth_login && $auth_login =~ m/:/) {
 }
 
 $SIG{'CHLD'} = 'IGNORE';
-my $bind = IO::Socket::INET->new(Listen=>10, LocalAddr=>$local_host.':'.$local_port, ReuseAddr=>1) or die "Could not bind to $local_host:$local_port\n";
+my $bind = IO::Socket::INET->new(Listen=>5, LocalAddr=>$local_host.':'.$local_port, Timeout=>$timeout, ReuseAddr=>1) or die "Could not bind to $local_host:$local_port\n";
 
 if ($daemon) {
 	print "Now entering process into the background...\n";
@@ -256,15 +260,15 @@ sub socks_get_host {
 	sysread($client, $t, 1);
 	$ord = ord($t);
 	if ($ord == 1) {
-	sysread($client, $raw_host, 4);
-	@host = $raw_host =~ /(.)/g;
-	$host = ord($host[0]).'.'.ord($host[1]).'.'.ord($host[2]).'.'.ord($host[3]);
+  	sysread($client, $raw_host, 4);
+  	@host = $raw_host =~ /(.)/g;
+  	$host = ord($host[0]).'.'.ord($host[1]).'.'.ord($host[2]).'.'.ord($host[3]);
 	} elsif ($ord == 3) {
-	sysread($client, $raw_host, 1);
-	sysread($client, $host, ord($raw_host));
-	$raw_host .= $host;
+  	sysread($client, $raw_host, 1);
+  	sysread($client, $host, ord($raw_host));
+  	$raw_host .= $host;
 	} elsif ($ord == 4) {
-	#ipv6
+	 #ipv6
 	}
 
 	return ($host, $t.$raw_host);
