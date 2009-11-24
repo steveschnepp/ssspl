@@ -1,5 +1,6 @@
 #!/usr/bin/perl
-#sss.pl v0.1.2 (27/02/09)
+#sss.pl v0.1.3 (24/11/09)
+
 use warnings; use strict;
 
 =head1 NAME
@@ -50,12 +51,16 @@ Operating System: Tested on FreeBSD 6.x and CentOS 4.x, should work on others.
 Required modules: C<IO::Socket::INET>, C<Digest::MD5>.
 
 =head1 CHANGES
-v0.1.2 (27/02/09) - Fixed a bug (Thanks Andreas)
-v0.1.1 (02/10/08) - Improved documentation
-v0.1 (12/09/08) - Initial release.
+v0.1.3  (24/11/09)  - Improved documentation and code
+                    - PID is displayed during fork
+                    - Added timeout
+                    - Added debug/loggings (for Katlyn`)
+v0.1.2  (27/02/09)  - Fixed a bug (Thanks Andreas)
+v0.1.1  (02/10/08)  - Improved documentation
+v0.1    (12/09/08)  - Initial release.
 
 =head1 TODO
-* In mIRC $serverip returns 255.255.255.255 <digital>
+* In mIRC $serverip returns 255.255.255.255 <digital/Excalibur>
 ** See: http://trout.snt.utwente.nl/ubbthreads/ubbthreads.php?ubb=showflat&Number=216636
 * Outgoing DCCs are borked (mIRC) <digital>
 * IPv6 support
@@ -65,7 +70,8 @@ v0.1 (12/09/08) - Initial release.
 ** See: http://forums.mozillazine.org/viewtopic.php?f=38&t=847655
 * Restrict IP access to the listening port <Reeve>
 * Logging <Katlyn`>
-* Display the PID when process goes into background.
+** Need a log format
+** See: http://en.wikipedia.org/wiki/Common_Log_Format
 
 =head2 FAQ
 * Why is there multiple processes in my process list?
@@ -137,16 +143,7 @@ Networking
 
 =cut
 
-use IO::Socket::INET;
-use Digest::MD5 qw(md5_hex);
-
-if (!$ARGV[1]) {
-	die "Usage: <local_host> <local_port> [auth_login(:auth_pass)] [timeout=180]\n".
-		"Note: the auth_pass must be an md5 (hex) hash\n".
-		"eg: localhost 34567 test 098f6bcd4621d373cade4e832627b4f6\n";
-}
-
-# internal settings
+## Internal settings
 my $daemon=1; #run as a daemon or not (1/0)
 
 our $local_host = shift;
@@ -155,18 +152,43 @@ our $auth_login = shift;
 our $timeout    = shift or 180;
 our $auth_pass;
 
+## Language
+my $lang_daemon="Process (%s) has entered into background.\n";
+my $lang_daemon_fail="Process failed to enter into background.\n";
+my $lang_usage="Usage: <local_host> <local_port> [auth_login(:auth_pass)] [timeout=180]\n".
+		"Note: the auth_pass must be an md5 (hex) hash\n".
+		"eg: localhost 34567 test 098f6bcd4621d373cade4e832627b4f6\n";
+my $lang_bind="Could not bind to %s:%s\n";
+
+## Usage
+if (!$ARGV[1]) { die $lang_usage; }
+
+## Requirements
+# Install using: perl -MCPAN -e'install %module'
+use IO::Socket::INET;
+use Digest::MD5 qw(md5_hex);
+
+#Parse auth part
 if ($auth_login && $auth_login =~ m/:/) {
 	($auth_login,$auth_pass)=split(':', $auth_login);
 }
 
+#Open listening port
 $SIG{'CHLD'} = 'IGNORE';
-my $bind = IO::Socket::INET->new(Listen=>5, LocalAddr=>$local_host.':'.$local_port, Timeout=>$timeout, ReuseAddr=>1) or die "Could not bind to $local_host:$local_port\n";
+my $bind = IO::Socket::INET->new(Listen=>5, LocalAddr=>$local_host.':'.$local_port, Timeout=>$timeout, ReuseAddr=>1) or die sprintf($lang_bind,$local_host,$local_port);
 
+#Run as daemon
 if ($daemon) {
-	print "Now entering process into the background...\n";
-	if (fork()) { close(); exit(); }
+  $pid=fork();
+  if ($pid) {
+    printf($lang_daemon,$pid);
+    close(); exit();
+  } else {
+    print $lang_daemon_fail;
+  }
 }
 
+# Start client
 our $client;
 while($client = $bind->accept()) {
 	$client->autoflush();
@@ -174,6 +196,7 @@ while($client = $bind->accept()) {
 	else { $bind->close(); new_client($client); exit(); }
 }
 
+# New client subroutine
 sub new_client {
 	my($t, $i, $buff, $ord, $success);
 	my $client = $_[0];
@@ -227,6 +250,7 @@ sub new_client {
 	$client->close();
 }
 
+# Do login authentication subroutine
 sub do_login_auth {
 	my($buff, $login, $pass);
 	my $client = $_[0];
@@ -251,6 +275,7 @@ sub do_login_auth {
 	return 0;
 }
 
+# Get socks hostname subrouteine
 sub socks_get_host {
 	my $client = $_[0];
 	my ($t, $ord, $raw_host);
@@ -274,6 +299,7 @@ sub socks_get_host {
 	return ($host, $t.$raw_host);
 }
 
+#Get socks port subroutine
 sub socks_get_port {
 	my $client = $_[0];
 	my ($raw_port, $port);
@@ -282,6 +308,7 @@ sub socks_get_port {
 	return ($port, $raw_port);
 }
 
+#Socks command
 sub socks_do {
 	my($t, $client, $host, $port) = @_;
 
@@ -293,53 +320,74 @@ sub socks_do {
 	return 1;
 }
 
+#Connect socks client to target server
+our $target;
 sub socks_connect {
 	my($client, $host, $port) = @_;
-	my $target = IO::Socket::INET->new(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Type => SOCK_STREAM);
+	my $target = IO::Socket::INET->new(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Timeout => $timeout, Proto => 'tcp', Type => SOCK_STREAM);
 
 	unless($target) { return; }
 
 	$target->autoflush();
 	while($client || $target) {
-	my $rin = "";
-	vec($rin, fileno($client), 1) = 1 if $client;
-	vec($rin, fileno($target), 1) = 1 if $target;
-	my($rout, $eout);
-	select($rout = $rin, undef, $eout = $rin, 120);
-	if (!$rout  &&  !$eout) { return; }
-	my $cbuffer = "";
-	my $tbuffer = "";
-
-	if ($client && (vec($eout, fileno($client), 1) || vec($rout, fileno($client), 1))) {
-	 my $result = sysread($client, $tbuffer, 1024);
-	 if (!defined($result) || !$result) { return; }
-	}
-
-	if ($target  &&  (vec($eout, fileno($target), 1)  || vec($rout, fileno($target), 1))) {
-	 my $result = sysread($target, $cbuffer, 1024);
-	 if (!defined($result) || !$result) { return; }
-	 }
-
-	while (my $len = length($tbuffer)) {
-	 my $res = syswrite($target, $tbuffer, $len);
-	 if ($res > 0) { $tbuffer = substr($tbuffer, $res); } else { return; }
-	}
-
-	while (my $len = length($cbuffer)) {
-	 my $res = syswrite($client, $cbuffer, $len);
-	 if ($res > 0) { $cbuffer = substr($cbuffer, $res); } else { return; }
-	}
+  	my $rin = "";
+  	vec($rin, fileno($client), 1) = 1 if $client;
+  	vec($rin, fileno($target), 1) = 1 if $target;
+  	my($rout, $eout);
+  	select($rout = $rin, undef, $eout = $rin, 120);
+  	if (!$rout  &&  !$eout) { return; }
+  	my $cbuffer = "";
+  	my $tbuffer = "";
+  
+  	if ($client && (vec($eout, fileno($client), 1) || vec($rout, fileno($client), 1))) {
+  	 my $result = sysread($client, $tbuffer, 1024);
+  	 if (!defined($result) || !$result) { return; }
+  	}
+  
+  	if ($target  &&  (vec($eout, fileno($target), 1)  || vec($rout, fileno($target), 1))) {
+  	 my $result = sysread($target, $cbuffer, 1024);
+  	 if (!defined($result) || !$result) { return; }
+  	}
+  
+  	while (my $len = length($tbuffer)) {
+  	 my $res = syswrite($target, $tbuffer, $len);
+  	 if ($res > 0) { $tbuffer = substr($tbuffer, $res); } else { return; }
+  	}
+  
+  	while (my $len = length($cbuffer)) {
+  	 my $res = syswrite($client, $cbuffer, $len);
+  	 if ($res > 0) { $cbuffer = substr($cbuffer, $res); } else { return; }
+  	}
 	}
 }
 
 sub socks_bind {
 	my($client, $host, $port) = @_;
-	# not supported
+	# not supported yet
 }
 
 sub socks_udp_associate {
 	my($client, $host, $port) = @_;
-	# not supported
+	# not supported yet
+}
+sub socks_open {
+  #log part here
+  return IO::Socket::INET->new(@_);
+}
+sub socks_close {
+  my $sock = shift;
+  #log part here
+  $sock->close;
+}
+sub socks_sysread {
+  my ($sock, $buffer, $len) = @_;
+  #logging part here
+  return sysread($sock, $buffer, $len);
+}
+sub socks_syswrite {
+  my ($sock, $buffer, $len) = @_;
+  #logging part here
+  return syswrite($sock, $buffer, $len);
 }
 
 #EOF
