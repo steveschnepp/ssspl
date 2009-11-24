@@ -144,9 +144,9 @@ Networking
 =cut
 
 ## Settings
-our $daemon=1; #run as a daemon or not (0/1)
-our $logging=0; #logging on or off (0/1)
-our $logfile='./sss.log';
+our $daemon   = 1; #run as a daemon or not (0/1)
+our $logging  = 0; #logging on or off (0/1)
+our $logfile  = './sss.log';
 
 ## Language
 my $lang_daemon="Process (%s) has entered into background.\n";
@@ -177,7 +177,7 @@ if ($auth_login && $auth_login =~ m/:/) {
 
 #Open listening port
 $SIG{'CHLD'} = 'IGNORE';
-my $bind = IO::Socket::INET->new(Listen=>5, LocalAddr=>$local_host.':'.$local_port, ReuseAddr=>1) or die sprintf($lang_bind,$local_host,$local_port);
+my $bind = socks_open(Listen=>5, LocalAddr=>$local_host.':'.$local_port, ReuseAddr=>1) or die sprintf($lang_bind,$local_host,$local_port);
 
 #Run as daemon
 if ($daemon) {
@@ -192,8 +192,8 @@ if ($daemon) {
 our $client;
 while($client = $bind->accept()) {
 	$client->autoflush();
-	if (fork()){ $client->close(); }
-	else { $bind->close(); new_client($client); exit(); }
+	if (fork()){ socks_close($client); }
+	else { socks_close($bind); new_client($client); exit(); }
 }
 
 # New client subroutine
@@ -201,24 +201,24 @@ sub new_client {
 	my($t, $i, $buff, $ord, $success);
 	my $client = shift;
 
-	sysread($client, $buff, 1);
+	socks_sysread($client, $buff, 1);
 	if (ord($buff) != 5) { return; } #must be SOCKS 5
 	
-	sysread($client, $buff, 1);
+	socks_sysread($client, $buff, 1);
 	$t=ord($buff);
-	unless(sysread($client, $buff, $t) == $t) { return; }
+	unless(socks_sysread($client, $buff, $t) == $t) { return; }
 
 	$success=0;
 	for($i=0; $i < $t; $i++) {
 	 $ord = ord(substr($buff, $i, 1));
 	 if ($ord == 0 && !$auth_login) {
-	   syswrite($client, "\x05\x00", 2);
+	   socks_syswrite($client, "\x05\x00", 2);
 	   $success++;
 	   last;
 	 }
 	 elsif ($ord == 1 && $auth_login) {
 	   #GSSAPI auth support
-	   #syswrite($client, "\x05\x01", 2);
+	   #socks_syswrite($client, "\x05\x01", 2);
 	   #$success++;
 	   #last;
 	 }
@@ -230,7 +230,7 @@ sub new_client {
 	}
 
 	if ($success) {
-	 $t = sysread($client, $buff, 3);
+	 $t = socks_sysread($client, $buff, 3);
 
 	 if (substr($buff, 0, 1) eq "\x05") {
 	   if (ord(substr($buff, 2, 1)) == 0) { # reserved
@@ -240,14 +240,14 @@ sub new_client {
 		 if (!$port) { return; }
 		 $ord = ord(substr($buff, 1, 1));
 		 $buff = "\x05\x00\x00".$raw_host.$raw_port;
-		 syswrite($client, $buff, length($buff));
+		 socks_syswrite($client, $buff, length($buff));
 		 socks_do($ord, $client, $host, $port);
 	   }
 	 }
 	}
-	else { syswrite($client, "\x05\xFF", 2); }
+	else { socks_syswrite($client, "\x05\xFF", 2); }
 
-	$client->close();
+	socks_close($client);
 }
 
 # Do login authentication subroutine
@@ -255,23 +255,23 @@ sub do_login_auth {
 	my($buff, $login, $pass);
 	my $client = shift;
 
-	syswrite($client, "\x05\x02", 2);
-	sysread($client, $buff, 1);
+	socks_syswrite($client, "\x05\x02", 2);
+	socks_sysread($client, $buff, 1);
 
 	if (ord($buff) == 1) {
-		sysread($client, $buff, 1);
-		sysread($client, $login, ord($buff));
-		sysread($client, $buff, 1);
-		sysread($client, $pass, ord($buff));
+		socks_sysread($client, $buff, 1);
+		socks_sysread($client, $login, ord($buff));
+		socks_sysread($client, $buff, 1);
+		socks_sysread($client, $pass, ord($buff));
 
 		if ($auth_login && $auth_pass && $login eq $auth_login && md5_hex($pass) eq $auth_pass) {
-			syswrite($client, "\x01\x00", 2);
+			socks_syswrite($client, "\x01\x00", 2);
 			return 1;
 		}
-		else { syswrite($client, "\x01\x01", 2); }
+		else { socks_syswrite($client, "\x01\x01", 2); }
 	}
 
-	$client->close();
+	socks_close($client);
 	return 0;
 }
 
@@ -282,15 +282,15 @@ sub socks_get_host {
 	my $host = "";
 	my @host;
 
-	sysread($client, $t, 1);
+	socks_sysread($client, $t, 1);
 	$ord = ord($t);
 	if ($ord == 1) {
-  	sysread($client, $raw_host, 4);
+  	socks_sysread($client, $raw_host, 4);
   	@host = $raw_host =~ /(.)/g;
   	$host = ord($host[0]).'.'.ord($host[1]).'.'.ord($host[2]).'.'.ord($host[3]);
 	} elsif ($ord == 3) {
-  	sysread($client, $raw_host, 1);
-  	sysread($client, $host, ord($raw_host));
+  	socks_sysread($client, $raw_host, 1);
+  	socks_sysread($client, $host, ord($raw_host));
   	$raw_host .= $host;
 	} elsif ($ord == 4) {
 	 #ipv6
@@ -303,7 +303,7 @@ sub socks_get_host {
 sub socks_get_port {
 	my $client = shift;
 	my ($raw_port, $port);
-	sysread($client, $raw_port, 2);
+	socks_sysread($client, $raw_port, 2);
 	$port = ord(substr($raw_port, 0, 1)) << 8 | ord(substr($raw_port, 1, 1));
 	return ($port, $raw_port);
 }
@@ -324,7 +324,7 @@ sub socks_do {
 our $target;
 sub socks_connect {
 	my($client, $host, $port) = @_;
-	my $target = IO::Socket::INET->new(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Type => SOCK_STREAM);
+	my $target = socks_open(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Type => SOCK_STREAM);
 
 	unless($target) { return; }
 
@@ -340,22 +340,22 @@ sub socks_connect {
   	my $tbuffer = "";
   
   	if ($client && (vec($eout, fileno($client), 1) || vec($rout, fileno($client), 1))) {
-  	 my $result = sysread($client, $tbuffer, 1024);
+  	 my $result = socks_sysread($client, $tbuffer, 1024);
   	 if (!defined($result) || !$result) { return; }
   	}
   
   	if ($target  &&  (vec($eout, fileno($target), 1)  || vec($rout, fileno($target), 1))) {
-  	 my $result = sysread($target, $cbuffer, 1024);
+  	 my $result = socks_sysread($target, $cbuffer, 1024);
   	 if (!defined($result) || !$result) { return; }
   	}
   
   	while (my $len = length($tbuffer)) {
-  	 my $res = syswrite($target, $tbuffer, $len);
+  	 my $res = socks_syswrite($target, $tbuffer, $len);
   	 if ($res > 0) { $tbuffer = substr($tbuffer, $res); } else { return; }
   	}
   
   	while (my $len = length($cbuffer)) {
-  	 my $res = syswrite($client, $cbuffer, $len);
+  	 my $res = socks_syswrite($client, $cbuffer, $len);
   	 if ($res > 0) { $cbuffer = substr($cbuffer, $res); } else { return; }
   	}
 	}
@@ -370,33 +370,34 @@ sub socks_udp_associate {
 	my($client, $host, $port) = @_;
 	# not supported yet
 }
+
+## Logging functions
+our $log;
 sub socks_open {
-  if ($logging) { open LOGFILE , ">>$logfile" or die $lang_file_open; }
-  #log part here
+  socks_log(">>");
   return IO::Socket::INET->new(@_);
 }
 sub socks_close {
   my $sock = shift;
-  if ($logging) { close LOGFILE };
-  #log part here
-  $sock->close;
+  socks_log("<<");
+  $sock->close();
 }
 sub socks_sysread {
-  my ($sock, $buffer, $len) = @_;
-  #logging part here
-  return sysread($sock, $buffer, $len);
+  my $result = sysread($_[0], $_[1], $_[2]);
+  socks_log("<$_[1]");
+  return $result;
 }
 sub socks_syswrite {
-  my ($sock, $buffer, $len) = @_;
-  #logging part here
-  return syswrite($sock, $buffer, $len);
+  socks_log(">$_[1]");
+  return syswrite($_[0], $_[1], $_[2]);
 }
 
 sub socks_log {
-  my $output = shift;
   if ($logging){
-    print LOGFILE "$output\n";
+    open(LOG, ">>$logfile") or die $lang_file_open;;
+    print LOG shift;
+    close(LOG);
   }
-}
+} 
 
 #EOF
