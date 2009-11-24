@@ -59,23 +59,24 @@ v0.1.1  (02/10/08)  - Improved documentation
 v0.1    (12/09/08)  - Initial release.
 
 =head1 TODO
-* Outgoing DCCs are borked (mIRC) <digital>
+* Restrict IP access to the listening port <Reeve>
+* Need a log format, see: http://en.wikipedia.org/wiki/Common_Log_Format
+* Mozilla Firefox support/GSSAPI authentication support <OutCast3k>
+** See: http://forums.mozillazine.org/viewtopic.php?f=38&t=847655
 * IPv6 support
 * BIND method
 * UDP ASSOCIATE method
-* Mozilla Firefox support/GSSAPI authentication support <OutCast3k>
-** See: http://forums.mozillazine.org/viewtopic.php?f=38&t=847655
-* Restrict IP access to the listening port <Reeve>
-* Logging <Katlyn`>
-** Need a log format, see: http://en.wikipedia.org/wiki/Common_Log_Format
 
 =head2 FAQ
 * Why is there multiple processes in my process list?
 ** Each new connection spawns a new process, so it is easier to manage.
 * Why does $serverip in mIRC return 255.255.255.255?
 ** 255.255.255.255 is the default value of a non-resolved address (INADDR_NONE).
-** mIRC via SOCKS5 does not need to resolve the server address.
-** See: http://tinyurl.com/3cw3ul
+** mIRC does not need to resolve the IRC server address.
+** See: http://tinyurl.com/yjs8kyf
+* Why is DCC SEND or DCC CHAT is not working?
+** It should work, contact me to diagnose further.
+** See: http://www.mirc.com/help/help-dcc.txt
 
 =head2 NOTES
 * http://en.wikipedia.org/wiki/SOCKS
