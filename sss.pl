@@ -53,7 +53,6 @@ Required modules: C<IO::Socket::INET>, C<Digest::MD5>.
 =head1 CHANGES
 v0.1.3  (24/11/09)  - Improved documentation and code
                     - PID is displayed during fork
-                    - Added timeout
                     - Added logging (for Katlyn`)
 v0.1.2  (27/02/09)  - Fixed a bug (Thanks Andreas)
 v0.1.1  (02/10/08)  - Improved documentation
@@ -151,7 +150,7 @@ our $logfile='./sss.log';
 
 ## Language
 my $lang_daemon="Process (%s) has entered into background.\n";
-my $lang_usage="Usage: <local_host> <local_port> [auth_login(:auth_pass)] [timeout=180]\n".
+my $lang_usage="Usage: <local_host> <local_port> [auth_login(:auth_pass)]\n".
 		"Note: the auth_pass must be an md5 (hex) hash\n".
 		"eg: localhost 34567 test 098f6bcd4621d373cade4e832627b4f6\n";
 my $lang_bind="Could not bind to %s:%s\n";
@@ -164,9 +163,7 @@ if (!$ARGV[1]) { die $lang_usage; }
 our $local_host = shift;
 our $local_port = shift;
 our $auth_login = shift;
-our $timeout    = shift;
 our $auth_pass;
-if (!$timeout) { $timeout=180; }
 
 ## Requirements
 # Install using: perl -MCPAN -e'install %module'
@@ -180,7 +177,7 @@ if ($auth_login && $auth_login =~ m/:/) {
 
 #Open listening port
 $SIG{'CHLD'} = 'IGNORE';
-my $bind = IO::Socket::INET->new(Listen=>5, LocalAddr=>$local_host.':'.$local_port, Timeout=>$timeout, ReuseAddr=>1) or die sprintf($lang_bind,$local_host,$local_port);
+my $bind = IO::Socket::INET->new(Listen=>5, LocalAddr=>$local_host.':'.$local_port, ReuseAddr=>1) or die sprintf($lang_bind,$local_host,$local_port);
 
 #Run as daemon
 if ($daemon) {
@@ -327,7 +324,7 @@ sub socks_do {
 our $target;
 sub socks_connect {
 	my($client, $host, $port) = @_;
-	my $target = IO::Socket::INET->new(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Timeout => $timeout, Proto => 'tcp', Type => SOCK_STREAM);
+	my $target = IO::Socket::INET->new(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Type => SOCK_STREAM);
 
 	unless($target) { return; }
 
