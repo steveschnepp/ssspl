@@ -15,7 +15,7 @@ It will accept username/password authentication.
 
 The script runs in the background as a daemon.
 
-=head2 Why it exists
+=head2 HISTORY
 
 Originally I was looking for a simple SOCKS5 Server (with user/pass auth) that would run 
 as a non-root user on FreeBSD.
@@ -32,7 +32,7 @@ especially with user feedback.
 
 You can read the full story here: http://www.hm2k.com/posts/freebsd-socks-proxy-for-mirc
 
-=head2 Usage
+=head2 USAGE
 
 You run the script using the following command:
 	./sss.pl <local_host> <local_port> [auth_login(:auth_pass)]
@@ -54,14 +54,12 @@ Required modules: C<IO::Socket::INET>, C<Digest::MD5>.
 v0.1.3  (24/11/09)  - Improved documentation and code
                     - PID is displayed during fork
                     - Added timeout
-                    - Added debug/loggings (for Katlyn`)
+                    - Added logging (for Katlyn`)
 v0.1.2  (27/02/09)  - Fixed a bug (Thanks Andreas)
 v0.1.1  (02/10/08)  - Improved documentation
 v0.1    (12/09/08)  - Initial release.
 
 =head1 TODO
-* In mIRC $serverip returns 255.255.255.255 <digital/Excalibur>
-** See: http://trout.snt.utwente.nl/ubbthreads/ubbthreads.php?ubb=showflat&Number=216636
 * Outgoing DCCs are borked (mIRC) <digital>
 * IPv6 support
 * BIND method
@@ -70,14 +68,17 @@ v0.1    (12/09/08)  - Initial release.
 ** See: http://forums.mozillazine.org/viewtopic.php?f=38&t=847655
 * Restrict IP access to the listening port <Reeve>
 * Logging <Katlyn`>
-** Need a log format
-** See: http://en.wikipedia.org/wiki/Common_Log_Format
+** Need a log format, see: http://en.wikipedia.org/wiki/Common_Log_Format
 
 =head2 FAQ
 * Why is there multiple processes in my process list?
-** Each new connection spawns a new process. I decided to do this to make it easier to manage.
+** Each new connection spawns a new process, so it is easier to manage.
+* Why does $serverip in mIRC return 255.255.255.255?
+** 255.255.255.255 is the default value of a non-resolved address (INADDR_NONE).
+** mIRC via SOCKS5 does not need to resolve the server address.
+** See: http://tinyurl.com/3cw3ul
 
-=head2 Notes
+=head2 NOTES
 * http://en.wikipedia.org/wiki/SOCKS
 * http://ftp.icm.edu.pl/packages/socks/socks4/SOCKS4.protocol
 * http://ftp.icm.edu.pl/packages/socks/socks4/SOCKS4A.protocol
@@ -100,7 +101,7 @@ v0.1    (12/09/08)  - Initial release.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2008-2009, <a href="http://www.hm2k.com/">HM2K</a>. All rights reserved.
+Copyright (c) 2008-2010, <a href="http://www.hm2k.com/">HM2K</a>. All rights reserved.
 
 Released as Open Source under the BSD License.
 
@@ -143,25 +144,29 @@ Networking
 
 =cut
 
-## Internal settings
-my $daemon=1; #run as a daemon or not (1/0)
-
-our $local_host = shift;
-our $local_port = shift;
-our $auth_login = shift;
-our $timeout    = shift or 180;
-our $auth_pass;
+## Settings
+our $daemon=1; #run as a daemon or not (0/1)
+our $logging=0; #logging on or off (0/1)
+our $logfile='./sss.log';
 
 ## Language
 my $lang_daemon="Process (%s) has entered into background.\n";
-my $lang_daemon_fail="Process failed to enter into background.\n";
 my $lang_usage="Usage: <local_host> <local_port> [auth_login(:auth_pass)] [timeout=180]\n".
 		"Note: the auth_pass must be an md5 (hex) hash\n".
 		"eg: localhost 34567 test 098f6bcd4621d373cade4e832627b4f6\n";
 my $lang_bind="Could not bind to %s:%s\n";
+my $lang_file_open="Can't open log file.";
 
 ## Usage
 if (!$ARGV[1]) { die $lang_usage; }
+
+## Arguments
+our $local_host = shift;
+our $local_port = shift;
+our $auth_login = shift;
+our $timeout    = shift;
+our $auth_pass;
+if (!$timeout) { $timeout=180; }
 
 ## Requirements
 # Install using: perl -MCPAN -e'install %module'
@@ -179,12 +184,10 @@ my $bind = IO::Socket::INET->new(Listen=>5, LocalAddr=>$local_host.':'.$local_po
 
 #Run as daemon
 if ($daemon) {
-  $pid=fork();
+  our $pid=fork();
   if ($pid) {
     printf($lang_daemon,$pid);
     close(); exit();
-  } else {
-    print $lang_daemon_fail;
   }
 }
 
@@ -199,7 +202,7 @@ while($client = $bind->accept()) {
 # New client subroutine
 sub new_client {
 	my($t, $i, $buff, $ord, $success);
-	my $client = $_[0];
+	my $client = shift;
 
 	sysread($client, $buff, 1);
 	if (ord($buff) != 5) { return; } #must be SOCKS 5
@@ -253,7 +256,7 @@ sub new_client {
 # Do login authentication subroutine
 sub do_login_auth {
 	my($buff, $login, $pass);
-	my $client = $_[0];
+	my $client = shift;
 
 	syswrite($client, "\x05\x02", 2);
 	sysread($client, $buff, 1);
@@ -277,7 +280,7 @@ sub do_login_auth {
 
 # Get socks hostname subrouteine
 sub socks_get_host {
-	my $client = $_[0];
+	my $client = shift;
 	my ($t, $ord, $raw_host);
 	my $host = "";
 	my @host;
@@ -301,7 +304,7 @@ sub socks_get_host {
 
 #Get socks port subroutine
 sub socks_get_port {
-	my $client = $_[0];
+	my $client = shift;
 	my ($raw_port, $port);
 	sysread($client, $raw_port, 2);
 	$port = ord(substr($raw_port, 0, 1)) << 8 | ord(substr($raw_port, 1, 1));
@@ -371,11 +374,13 @@ sub socks_udp_associate {
 	# not supported yet
 }
 sub socks_open {
+  if ($logging) { open LOGFILE , ">>$logfile" or die $lang_file_open; }
   #log part here
   return IO::Socket::INET->new(@_);
 }
 sub socks_close {
   my $sock = shift;
+  if ($logging) { close LOGFILE };
   #log part here
   $sock->close;
 }
@@ -388,6 +393,13 @@ sub socks_syswrite {
   my ($sock, $buffer, $len) = @_;
   #logging part here
   return syswrite($sock, $buffer, $len);
+}
+
+sub socks_log {
+  my $output = shift;
+  if ($logging){
+    print LOGFILE "$output\n";
+  }
 }
 
 #EOF
