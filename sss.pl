@@ -1,11 +1,11 @@
 #!/usr/bin/perl
-#sss.pl v0.1.3 (24/11/09)
+#sss.pl v0.1.4 (03/05/10)
 
 use warnings; use strict;
 
 =head1 NAME
 
-Simple SOCKS Server for Perl
+Simple SOCKS5 Server for Perl
 
 =head1 DESCRIPTION
 
@@ -17,20 +17,24 @@ The script runs in the background as a daemon.
 
 =head2 HISTORY
 
-Originally I was looking for a simple SOCKS5 Server (with user/pass auth) that would run 
-as a non-root user on FreeBSD.
+Originally I was looking for a simple SOCKS5 Server (with user/pass auth) that
+would run as a non-root user on FreeBSD.
 
-I checked FreeBSD's ports for various SOCKS5 solutions and tried them all, only to discover
-that each one had a reason why it would not work, or why I could not use it.
+I checked the FreeBSD ports for various SOCKS5 solutions and tried them all, 
+only to discover that each one had a reason why it would not work, or why I 
+could not use it.
 
-I figured this could be done in perl, but found that there was no well maintained perl based solutions.
+I figured this could be done in perl, but found that there was no well 
+maintained perl based solutions.
 
-I hacked together this solution (with help from public domain scripts) and cleaned it up, ready for release.
+I hacked together this solution (with help from public domain scripts) and 
+cleaned it up, ready for release.
 
-Its simple, a feature I intend to maintain, however there is scope for much more potential,
-especially with user feedback.
+Its simple, a feature I intend to maintain, however there is scope for much more
+potential, especially with user feedback.
 
-You can read the full story here: http://www.hm2k.com/posts/freebsd-socks-proxy-for-mirc
+You can read the full story here:
+  http://www.hm2k.com/posts/freebsd-socks-proxy-for-mirc
 
 =head2 USAGE
 
@@ -51,6 +55,7 @@ Operating System: Tested on FreeBSD 6.x and CentOS 4.x, should work on others.
 Required modules: C<IO::Socket::INET>, C<Digest::MD5>.
 
 =head1 CHANGES
+v0.1.4  (03/05/10)  - Improved documentation and logging subs
 v0.1.3  (24/11/09)  - Improved documentation and code
                     - PID is displayed during fork
                     - Added logging (for Katlyn`)
@@ -61,8 +66,9 @@ v0.1    (12/09/08)  - Initial release.
 =head1 TODO
 * Restrict IP access to the listening port <Reeve>
 * Need a log format, see: http://en.wikipedia.org/wiki/Common_Log_Format
-* Mozilla Firefox support/GSSAPI authentication support <OutCast3k>
+* Mozilla Firefox support/GSSAPI authentication support <OutCast3k, kingvis>
 ** See: http://forums.mozillazine.org/viewtopic.php?f=38&t=847655
+** Alternative: http://blogs.techrepublic.com.com/security/?p=421
 * IPv6 support
 * BIND method
 * UDP ASSOCIATE method
@@ -77,6 +83,13 @@ v0.1    (12/09/08)  - Initial release.
 * Why is DCC SEND or DCC CHAT is not working?
 ** It should work, contact me to diagnose further.
 ** See: http://www.mirc.com/help/help-dcc.txt
+* How do I create an md5 hash?
+** In mIRC do: //echo -a $md5(password)
+** You can visit: http://pajhome.org.uk/crypt/md5/
+** I also added a -getmd5 option which you can use
+* Why doesnt this work with Mozilla Firefox?
+** Because Mozilla wont add SOCKS5 username/password auth support
+** Because Ive not added GSSAPI support yet (donations please)
 
 =head2 NOTES
 * http://en.wikipedia.org/wiki/SOCKS
@@ -130,9 +143,10 @@ WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH 
 
 =head1 CREDITS
 
-based on Satanic Socks Server v0.8.031206-perl and (in part) datapipe.pl by CuTTer
+Satanic Socks Server v0.8.031206-perl
+datapipe.pl by CuTTer
 
-also, special thanks to #perlhelp @ EFnet as they have helped me in the past.
+Also, thanks to #perlhelp @ EFnet
 
 =pod OSNAMES
 
@@ -147,29 +161,37 @@ Networking
 ## Settings
 our $daemon   = 1; #run as a daemon or not (0/1)
 our $logging  = 0; #logging on or off (0/1)
-our $logfile  = './sss.log';
+our $logfile  = 'sss.log';
 
 ## Language
 my $lang_daemon="Process (%s) has entered into background.\n";
-my $lang_usage="Usage: <local_host> <local_port> [auth_login(:auth_pass)]\n".
+my $lang_usage="Usage: $0 <local_host> <local_port> [auth_login(:auth_pass)]\n".
 		"Note: the auth_pass must be an md5 (hex) hash\n".
-		"eg: localhost 34567 test 098f6bcd4621d373cade4e832627b4f6\n";
+		"eg: $0 localhost 34567 test:098f6bcd4621d373cade4e832627b4f6\n";
 my $lang_bind="Could not bind to %s:%s\n";
-my $lang_file_open="Can't open log file.";
+my $lang_sockopen="Could not open a socket to %s:%s\n";
+my $lang_file_open="Could not open log file.";
 
 ## Usage
 if (!$ARGV[1]) { die $lang_usage; }
+
+## Requirements
+# Install using: perl -MCPAN -e'install %module'
+use IO::Socket::INET;
+use Digest::MD5 qw(md5_hex);
+
+##-md5 option
+if ($ARGV[0] eq '-getmd5') {
+  shift;
+  print md5_hex(shift);
+  exit(0);
+}
 
 ## Arguments
 our $local_host = shift;
 our $local_port = shift;
 our $auth_login = shift;
 our $auth_pass;
-
-## Requirements
-# Install using: perl -MCPAN -e'install %module'
-use IO::Socket::INET;
-use Digest::MD5 qw(md5_hex);
 
 #Parse auth part
 if ($auth_login && $auth_login =~ m/:/) {
@@ -178,7 +200,10 @@ if ($auth_login && $auth_login =~ m/:/) {
 
 #Open listening port
 $SIG{'CHLD'} = 'IGNORE';
-my $bind = socks_open(Listen=>5, LocalAddr=>$local_host.':'.$local_port, ReuseAddr=>1) or die sprintf($lang_bind,$local_host,$local_port);
+my $bind = socks_open(  Listen=>5,
+                        LocalAddr=>$local_host.':'.$local_port,
+                        ReuseAddr=>1) 
+                        or die sprintf($lang_bind,$local_host,$local_port);
 
 #Run as daemon
 if ($daemon) {
@@ -325,7 +350,11 @@ sub socks_do {
 our $target;
 sub socks_connect {
 	my($client, $host, $port) = @_;
-	my $target = socks_open(LocalHost => $local_host, PeerAddr => $host, PeerPort => $port, Proto => 'tcp', Type => SOCK_STREAM);
+	my $target = socks_open(LocalHost => $local_host,
+                          PeerAddr => $host.':'.$port,
+                          Proto => 'tcp',
+                          Type => SOCK_STREAM)
+                          or die sprintf($lang_sockopen,$host,$port);
 
 	unless($target) { return; }
 
@@ -375,30 +404,30 @@ sub socks_udp_associate {
 ## Logging functions
 our $log;
 sub socks_open {
-  socks_log(">>");
+  socks_log('|open>');
   return IO::Socket::INET->new(@_);
 }
 sub socks_close {
   my $sock = shift;
-  socks_log("<<");
-  $sock->close();
+  socks_log('<close|');
+  return $sock->close();
 }
 sub socks_sysread {
   my $result = sysread($_[0], $_[1], $_[2]);
-  socks_log("<$_[1]");
+  socks_log("<read|$_[1]");
   return $result;
 }
 sub socks_syswrite {
-  socks_log(">$_[1]");
+  socks_log("|write>$_[1]");
   return syswrite($_[0], $_[1], $_[2]);
 }
 
 sub socks_log {
-  if ($logging){
-    open(LOG, ">>$logfile") or die $lang_file_open;;
-    print LOG shift;
-    close(LOG);
-  }
+  if (!$logging){ return; }
+  open(LOG, ">>$logfile") or die $lang_file_open;;
+  print LOG shift;
+  print LOG "\n";
+  close(LOG);
 } 
 
 #EOF
