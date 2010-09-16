@@ -36,6 +36,17 @@ potential, especially with user feedback.
 You can read the full story here:
   http://www.hm2k.com/posts/freebsd-socks-proxy-for-mirc
 
+=head2 INSTALL
+
+  wget http://ssspl.svn.sourceforge.net/viewvc/ssspl/sss.pl
+  chmod 755 sss.pl
+
+OR
+
+  http://ssspl.svn.sourceforge.net/viewvc/ssspl.tar.gz?view=tar
+  tar zxvf ssspl.tar.gz
+  chmod 755 ssspl/sss.pl
+
 =head2 USAGE
 
 You run the script using the following command:
@@ -72,6 +83,8 @@ v0.1    (12/09/08)  - Initial release.
 * IPv6 support
 * BIND method
 * UDP ASSOCIATE method
+* pid file <mrakus>
+* perl threads instead of fork()? <mrakus>
 
 =head2 FAQ
 * Why is there multiple processes in my process list?
